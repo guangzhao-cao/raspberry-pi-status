@@ -13,7 +13,7 @@ The skill collects a one-time system snapshot as stable JSON, then guides a comp
 - System-visible and cgroup memory
 - Root filesystem capacity and usage
 - CPU/SoC temperature
-- Raspberry Pi throttling and undervoltage state through optional `vcgencmd`
+- Raspberry Pi throttling and undervoltage state through Linux firmware sysfs or optional `vcgencmd`
 - Conservative container detection with per-metric scope
 - Graceful degradation when an interface or optional command is unavailable
 

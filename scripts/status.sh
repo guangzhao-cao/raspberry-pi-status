@@ -123,6 +123,51 @@ count_cpuset() {
     }'
 }
 
+set_throttling_value() {
+    throttling_value=$1
+    throttling_value_source=$2
+
+    case "$throttling_value" in
+        0x*) throttling_hex=${throttling_value#0x} ;;
+        0X*) throttling_hex=${throttling_value#0X} ;;
+        *) throttling_hex='' ;;
+    esac
+
+    if [ -n "$throttling_hex" ]; then
+        case "$throttling_hex" in
+            *[!0-9A-Fa-f]*) return 1 ;;
+            *) throttling_decimal=$((0x$throttling_hex)) ;;
+        esac
+    elif is_uint "$throttling_value"; then
+        throttling_decimal=$throttling_value
+    else
+        return 1
+    fi
+
+    throttling_raw=$throttling_value
+    throttling_available=true
+    throttling_scope=host
+    throttling_source=$throttling_value_source
+    throttling_reason=''
+    current_undervoltage=false
+    current_frequency_capped=false
+    current_throttled=false
+    current_soft_temperature_limit=false
+    occurred_undervoltage=false
+    occurred_frequency_capped=false
+    occurred_throttled=false
+    occurred_soft_temperature_limit=false
+    [ $((throttling_decimal & 1)) -ne 0 ] && current_undervoltage=true
+    [ $((throttling_decimal & 2)) -ne 0 ] && current_frequency_capped=true
+    [ $((throttling_decimal & 4)) -ne 0 ] && current_throttled=true
+    [ $((throttling_decimal & 8)) -ne 0 ] && current_soft_temperature_limit=true
+    [ $((throttling_decimal & 65536)) -ne 0 ] && occurred_undervoltage=true
+    [ $((throttling_decimal & 131072)) -ne 0 ] && occurred_frequency_capped=true
+    [ $((throttling_decimal & 262144)) -ne 0 ] && occurred_throttled=true
+    [ $((throttling_decimal & 524288)) -ne 0 ] && occurred_soft_temperature_limit=true
+    return 0
+}
+
 cgroup_v2_file() {
     name=$1
     relative=$2
@@ -694,49 +739,40 @@ if [ "$supported" = true ]; then
         temperature_reason=not_exposed
     fi
 
-    # Raspberry Pi firmware throttling bitmask.
-    throttling_reason=command_unavailable
-    if command -v vcgencmd >/dev/null 2>&1; then
+    # Raspberry Pi firmware throttling bitmask. Prefer the kernel sysfs view;
+    # vcgencmd requires a firmware mailbox device that some distributions do
+    # not expose even when the utility itself is installed.
+    throttling_reason=not_found
+    for throttling_path in \
+        /sys/devices/platform/soc/soc:firmware/get_throttled \
+        /sys/devices/platform/*/*:firmware/get_throttled
+    do
+        [ -e "$throttling_path" ] || continue
+        if [ ! -r "$throttling_path" ]; then
+            throttling_reason=permission_denied
+            continue
+        fi
+
+        throttling_candidate=$(first_line "$throttling_path")
+        if set_throttling_value "$throttling_candidate" linux_firmware_sysfs; then
+            break
+        fi
+        throttling_reason=parse_error
+    done
+
+    if [ "$throttling_available" = false ] && command -v vcgencmd >/dev/null 2>&1; then
         throttling_output=$(vcgencmd get_throttled 2>/dev/null)
         vcgencmd_throttling_status=$?
         if [ "$vcgencmd_throttling_status" -ne 0 ]; then
             throttling_reason=not_exposed
         else
             throttling_candidate=${throttling_output#throttled=}
-            case "$throttling_candidate" in
-                0x*) throttling_hex=${throttling_candidate#0x} ;;
-                0X*) throttling_hex=${throttling_candidate#0X} ;;
-                *) throttling_hex='' ;;
-            esac
-
-            case "$throttling_hex" in
-                ''|*[!0-9A-Fa-f]*) throttling_reason=parse_error ;;
-                *)
-                    throttling_raw=$throttling_candidate
-                    throttling_decimal=$((0x$throttling_hex))
-                    throttling_available=true
-                    throttling_scope=host
-                    throttling_source=vcgencmd
-                    throttling_reason=''
-                    current_undervoltage=false
-                    current_frequency_capped=false
-                    current_throttled=false
-                    current_soft_temperature_limit=false
-                    occurred_undervoltage=false
-                    occurred_frequency_capped=false
-                    occurred_throttled=false
-                    occurred_soft_temperature_limit=false
-                    [ $((throttling_decimal & 1)) -ne 0 ] && current_undervoltage=true
-                    [ $((throttling_decimal & 2)) -ne 0 ] && current_frequency_capped=true
-                    [ $((throttling_decimal & 4)) -ne 0 ] && current_throttled=true
-                    [ $((throttling_decimal & 8)) -ne 0 ] && current_soft_temperature_limit=true
-                    [ $((throttling_decimal & 65536)) -ne 0 ] && occurred_undervoltage=true
-                    [ $((throttling_decimal & 131072)) -ne 0 ] && occurred_frequency_capped=true
-                    [ $((throttling_decimal & 262144)) -ne 0 ] && occurred_throttled=true
-                    [ $((throttling_decimal & 524288)) -ne 0 ] && occurred_soft_temperature_limit=true
-                    ;;
-            esac
+            if ! set_throttling_value "$throttling_candidate" vcgencmd; then
+                throttling_reason=parse_error
+            fi
         fi
+    elif [ "$throttling_available" = false ] && [ "$throttling_reason" = not_found ]; then
+        throttling_reason=command_unavailable
     fi
 else
     hardware_reason=not_supported

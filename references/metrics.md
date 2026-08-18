@@ -78,7 +78,7 @@ Prefer explicit current thermal throttling or soft-limit flags over a universal 
 
 ## Throttling and undervoltage
 
-When available, `vcgencmd get_throttled` returns a hexadecimal bitmask. The collector preserves it and decodes these documented positions as factual booleans:
+When available, the Linux firmware sysfs interface returns a decimal bitmask and `vcgencmd get_throttled` returns a hexadecimal bitmask. The collector prefers the read-only sysfs interface, falls back to optional `vcgencmd`, preserves the source value, and decodes these documented positions as factual booleans:
 
 | Bit | Meaning |
 | --- | --- |
@@ -105,4 +105,3 @@ Report health and coverage separately.
 Coverage is `Sufficient` only when key Host-scoped identity, CPU/load, memory, root storage, temperature, and throttling data are available. Use `Partial` when useful evidence exists but important Host metrics are missing. Use `Insufficient` when the available data cannot support a meaningful Host assessment.
 
 `Normal` with `Partial` coverage must be phrased as “no issue was found in the observed metrics,” not “the Raspberry Pi is definitely healthy.”
-
