@@ -20,7 +20,7 @@ json_escape() {
             }
             first = 0
             gsub(/\\/, "\\\\")
-            gsub(/\"/, "\\\"")
+            gsub(/"/, "\\\"")
             gsub(/\t/, "\\t")
             gsub(/\r/, "\\r")
             printf "%s", $0
