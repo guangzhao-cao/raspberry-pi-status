@@ -1,5 +1,10 @@
 #!/bin/sh
 
+if [ "${MOCK_VCGENCMD_FAIL:-0}" = 1 ]; then
+    printf '%s\n' "Can't open device file: /dev/vcio"
+    exit 255
+fi
+
 case "${1:-} ${2:-}" in
     'measure_temp ')
         printf "%s\n" "temp=48.2'C"
@@ -11,4 +16,3 @@ case "${1:-} ${2:-}" in
         exit 1
         ;;
 esac
-

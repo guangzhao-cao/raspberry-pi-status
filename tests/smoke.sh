@@ -109,6 +109,20 @@ assert data["throttling"]["occurred_since_boot"] == {
 }
 PY
 
+MOCK_VCGENCMD_FAIL=1 PATH="$mock_bin:$PATH" sh "$collector" >"$test_dir/mock-vcgencmd-failure.json" 2>"$test_dir/mock-vcgencmd-failure-stderr"
+
+python3 - "$test_dir/mock-vcgencmd-failure.json" <<'PY'
+import json
+import pathlib
+import sys
+
+data = json.loads(pathlib.Path(sys.argv[1]).read_text(encoding="utf-8"))
+
+assert data["throttling"]["available"] is False
+assert data["throttling"]["raw"] is None
+assert data["throttling"]["reason"] == "not_exposed"
+PY
+
 set +e
 sh "$collector" unexpected >"$test_dir/invalid-stdout" 2>"$test_dir/invalid-stderr"
 invalid_status=$?

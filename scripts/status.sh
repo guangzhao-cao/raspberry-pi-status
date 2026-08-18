@@ -376,7 +376,18 @@ if [ "$supported" = true ]; then
         runtime_confidence=high
         add_runtime_evidence cgroup_marker
     fi
-    if [ -r /proc/self/mountinfo ] && grep -Eiq '(docker|containerd|kubepods|containers|overlay)' /proc/self/mountinfo 2>/dev/null; then
+    # A Docker Host can see overlay mounts belonging to its containers. Only
+    # the current process root mount is useful evidence for this runtime.
+    if [ -r /proc/self/mountinfo ] && awk '
+        $5 == "/" {
+            for (i = 1; i < NF; i++) {
+                if ($i == "-" && ($(i + 1) == "overlay" || $(i + 1) == "aufs")) {
+                    root_is_container_overlay = 1
+                }
+            }
+        }
+        END { exit(root_is_container_overlay ? 0 : 1) }
+    ' /proc/self/mountinfo 2>/dev/null; then
         runtime_environment=container
         if [ "$runtime_confidence" = low ]; then
             runtime_confidence=medium
@@ -663,16 +674,21 @@ if [ "$supported" = true ]; then
 
     if [ "$temperature_available" = false ] && command -v vcgencmd >/dev/null 2>&1; then
         vcgencmd_temperature=$(vcgencmd measure_temp 2>/dev/null)
-        candidate=$(printf '%s' "$vcgencmd_temperature" | sed -n "s/^temp=\([-0-9.][0-9.]*\)'C$/\1/p")
-        if is_number "$candidate" && awk -v value="$candidate" 'BEGIN { exit(value >= -40 && value <= 150 ? 0 : 1) }'; then
-            temperature_available=true
-            temperature_celsius=$candidate
-            temperature_sensor_type=soc
-            temperature_scope=host
-            temperature_source=vcgencmd
-            temperature_reason=''
+        vcgencmd_temperature_status=$?
+        if [ "$vcgencmd_temperature_status" -ne 0 ]; then
+            temperature_reason=not_exposed
         else
-            temperature_reason=parse_error
+            candidate=$(printf '%s' "$vcgencmd_temperature" | sed -n "s/^temp=\([-0-9.][0-9.]*\)'C$/\1/p")
+            if is_number "$candidate" && awk -v value="$candidate" 'BEGIN { exit(value >= -40 && value <= 150 ? 0 : 1) }'; then
+                temperature_available=true
+                temperature_celsius=$candidate
+                temperature_sensor_type=soc
+                temperature_scope=host
+                temperature_source=vcgencmd
+                temperature_reason=''
+            else
+                temperature_reason=parse_error
+            fi
         fi
     elif [ "$temperature_available" = false ] && [ "$thermal_candidate_seen" = true ] && [ "$temperature_reason" = not_found ]; then
         temperature_reason=not_exposed
@@ -682,40 +698,45 @@ if [ "$supported" = true ]; then
     throttling_reason=command_unavailable
     if command -v vcgencmd >/dev/null 2>&1; then
         throttling_output=$(vcgencmd get_throttled 2>/dev/null)
-        throttling_candidate=${throttling_output#throttled=}
-        case "$throttling_candidate" in
-            0x*) throttling_hex=${throttling_candidate#0x} ;;
-            0X*) throttling_hex=${throttling_candidate#0X} ;;
-            *) throttling_hex='' ;;
-        esac
+        vcgencmd_throttling_status=$?
+        if [ "$vcgencmd_throttling_status" -ne 0 ]; then
+            throttling_reason=not_exposed
+        else
+            throttling_candidate=${throttling_output#throttled=}
+            case "$throttling_candidate" in
+                0x*) throttling_hex=${throttling_candidate#0x} ;;
+                0X*) throttling_hex=${throttling_candidate#0X} ;;
+                *) throttling_hex='' ;;
+            esac
 
-        case "$throttling_hex" in
-            ''|*[!0-9A-Fa-f]*) throttling_reason=parse_error ;;
-            *)
-                throttling_raw=$throttling_candidate
-                throttling_decimal=$((0x$throttling_hex))
-                throttling_available=true
-                throttling_scope=host
-                throttling_source=vcgencmd
-                throttling_reason=''
-                current_undervoltage=false
-                current_frequency_capped=false
-                current_throttled=false
-                current_soft_temperature_limit=false
-                occurred_undervoltage=false
-                occurred_frequency_capped=false
-                occurred_throttled=false
-                occurred_soft_temperature_limit=false
-                [ $((throttling_decimal & 1)) -ne 0 ] && current_undervoltage=true
-                [ $((throttling_decimal & 2)) -ne 0 ] && current_frequency_capped=true
-                [ $((throttling_decimal & 4)) -ne 0 ] && current_throttled=true
-                [ $((throttling_decimal & 8)) -ne 0 ] && current_soft_temperature_limit=true
-                [ $((throttling_decimal & 65536)) -ne 0 ] && occurred_undervoltage=true
-                [ $((throttling_decimal & 131072)) -ne 0 ] && occurred_frequency_capped=true
-                [ $((throttling_decimal & 262144)) -ne 0 ] && occurred_throttled=true
-                [ $((throttling_decimal & 524288)) -ne 0 ] && occurred_soft_temperature_limit=true
-                ;;
-        esac
+            case "$throttling_hex" in
+                ''|*[!0-9A-Fa-f]*) throttling_reason=parse_error ;;
+                *)
+                    throttling_raw=$throttling_candidate
+                    throttling_decimal=$((0x$throttling_hex))
+                    throttling_available=true
+                    throttling_scope=host
+                    throttling_source=vcgencmd
+                    throttling_reason=''
+                    current_undervoltage=false
+                    current_frequency_capped=false
+                    current_throttled=false
+                    current_soft_temperature_limit=false
+                    occurred_undervoltage=false
+                    occurred_frequency_capped=false
+                    occurred_throttled=false
+                    occurred_soft_temperature_limit=false
+                    [ $((throttling_decimal & 1)) -ne 0 ] && current_undervoltage=true
+                    [ $((throttling_decimal & 2)) -ne 0 ] && current_frequency_capped=true
+                    [ $((throttling_decimal & 4)) -ne 0 ] && current_throttled=true
+                    [ $((throttling_decimal & 8)) -ne 0 ] && current_soft_temperature_limit=true
+                    [ $((throttling_decimal & 65536)) -ne 0 ] && occurred_undervoltage=true
+                    [ $((throttling_decimal & 131072)) -ne 0 ] && occurred_frequency_capped=true
+                    [ $((throttling_decimal & 262144)) -ne 0 ] && occurred_throttled=true
+                    [ $((throttling_decimal & 524288)) -ne 0 ] && occurred_soft_temperature_limit=true
+                    ;;
+            esac
+        fi
     fi
 else
     hardware_reason=not_supported
