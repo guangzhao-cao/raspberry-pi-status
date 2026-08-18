@@ -1,0 +1,14 @@
+#!/bin/sh
+
+case "${1:-} ${2:-}" in
+    'measure_temp ')
+        printf "%s\n" "temp=48.2'C"
+        ;;
+    'get_throttled ')
+        printf '%s\n' 'throttled=0x50005'
+        ;;
+    *)
+        exit 1
+        ;;
+esac
+
