@@ -23,6 +23,13 @@ v0.1 targets Raspberry Pi hardware running Linux, including Raspberry Pi OS, Deb
 
 The collector is designed for Raspberry Pi 3, 4, 5, and Zero families, but compatibility claims will distinguish design intent from environments tested on real hardware.
 
+### Tested environments
+
+- Raspberry Pi 4 Model B Rev 1.4, Ubuntu 24.04.4 LTS, Linux 6.8, ARM64, cgroup v2
+- Docker container on the same Host, Debian 13 user space, 2-CPU quota, and 4 GiB memory limit
+
+The Host and container tests cover sysfs temperature and throttling, system-visible versus cgroup memory, CPU quota and CPU-set reporting, container root filesystem scope, and Docker detection. Other Raspberry Pi models and Linux distributions are designed targets but are not yet claimed as tested.
+
 ## Install
 
 Install from GitHub with a compatible Agent Skills installer:
