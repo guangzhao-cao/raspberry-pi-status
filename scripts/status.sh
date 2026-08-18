@@ -206,7 +206,7 @@ kernel_source=''
 if [ -n "$kernel_release" ]; then
     kernel_available=true
     kernel_reason=''
-    kernel_source=uname
+    kernel_source='uname'
 fi
 
 architecture_available=false
@@ -215,7 +215,7 @@ architecture_source=''
 if [ -n "$architecture" ]; then
     architecture_available=true
     architecture_reason=''
-    architecture_source=uname
+    architecture_source='uname'
 fi
 
 runtime_environment=unknown
@@ -356,7 +356,7 @@ if [ "$supported" = true ]; then
         os_available=true
         os_name=$system_name
         os_pretty_name=$system_name
-        os_source=uname
+        os_source='uname'
         os_reason=''
     fi
 
@@ -469,7 +469,7 @@ if [ "$supported" = true ]; then
         if is_uint "$candidate" && [ "$candidate" -gt 0 ]; then
             cpu_count=$candidate
             cpu_count_available=true
-            cpu_count_source=getconf
+            cpu_count_source='getconf'
         fi
     fi
     if [ "$cpu_count_available" = false ] && [ -r /proc/cpuinfo ]; then
@@ -723,7 +723,7 @@ else
         os_available=true
         os_name=$system_name
         os_pretty_name=$system_name
-        os_source=uname
+        os_source='uname'
         os_reason=''
     else
         os_reason=not_supported

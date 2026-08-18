@@ -2,8 +2,8 @@
 
 set -eu
 
-script_dir=$(CDPATH= cd "$(dirname "$0")" && pwd)
-project_dir=$(CDPATH= cd "$script_dir/.." && pwd)
+script_dir=$(CDPATH='' cd "$(dirname "$0")" && pwd)
+project_dir=$(CDPATH='' cd "$script_dir/.." && pwd)
 collector=$project_dir/scripts/status.sh
 
 if ! command -v python3 >/dev/null 2>&1; then
